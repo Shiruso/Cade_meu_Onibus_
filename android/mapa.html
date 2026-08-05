@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body, #map { width:100%; height:100%; background:#0f172a; }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.8); opacity: 0.4; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .user-marker-pulse {
+    width: 18px; height: 18px;
+    background: #3b82f6;
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(59,130,246,0.7);
+    position: relative;
+  }
+  .user-marker-pulse::after {
+    content: '';
+    position: absolute;
+    top: -5px; left: -5px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(59,130,246,0.3);
+    animation: pulse 2s infinite;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  var map = L.map("map", {zoomControl: false}).setView([-22.9068, -43.1729], 12);
+
+  var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "© OpenStreetMap"
+  });
+  var sat = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Tiles © Esri" }
+  );
+  osm.addTo(map);
+  L.control.layers({"Claro": osm, "Satelite": sat}, {}, {position: "topright"}).addTo(map);
+  L.control.zoom({position: "bottomright"}).addTo(map);
+
+  window._layerRotas = L.layerGroup().addTo(map);
+  window._veiculos = {};
+  window._dadosVeiculos = {};
+  window._userMarker = null;
+  window._userLat = null;
+  window._userLng = null;
+
+  // --- Geolocalização ---
+  window.iniciarGeolocalizacao = function() {
+      if (!navigator.geolocation) {
+          if (window.Android) {
+              Android.onGeoError("Geolocalizacao nao suportada neste dispositivo.");
+          }
+          return;
+      }
+      navigator.geolocation.getCurrentPosition(
+          function(pos) {
+              window._atualizarPosicaoUsuario(pos);
+              navigator.geolocation.watchPosition(
+                  window._atualizarPosicaoUsuario,
+                  function(err) {},
+                  { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+              );
+          },
+          function(err) {
+              var msg = "";
+              if (err.code === 1) {
+                  msg = "Permissao de localizacao negada. Ative nas configuracoes.";
+              } else if (err.code === 2) {
+                  msg = "Localizacao indisponivel. Verifique se o GPS esta ativado.";
+              } else {
+                  msg = "Nao foi possivel obter a localizacao. Ative o GPS.";
+              }
+              if (window.Android) {
+                  Android.onGeoError(msg);
+              }
+          },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      );
+  };
+
+  window._atualizarPosicaoUsuario = function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      window._userLat = lat;
+      window._userLng = lng;
+
+      if (window._userMarker) {
+          window._userMarker.setLatLng([lat, lng]);
+      } else {
+          var icon = L.divIcon({
+              className: "",
+              html: '<div class="user-marker-pulse"></div>',
+              iconSize: [18, 18],
+              iconAnchor: [9, 9]
+          });
+          window._userMarker = L.marker([lat, lng], {icon: icon, zIndexOffset: 1000})
+              .addTo(map)
+              .bindPopup("<b>Voce esta aqui</b>");
+      }
+      if (window.Android) {
+          Android.onGeoUpdate(lat + "," + lng);
+      }
+  };
+
+  // Distancia haversine (km)
+  window.calcularDistancia = function(lat1, lng1, lat2, lng2) {
+      var R = 6371.0;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLng = (lng2 - lng1) * Math.PI / 180;
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  // --- Controle do mapa ---
+  window.limparMapa = function() {
+      window._layerRotas.clearLayers();
+      for (var id in window._veiculos) {
+          map.removeLayer(window._veiculos[id]);
+      }
+      window._veiculos = {};
+      window._dadosVeiculos = {};
+  };
+
+  window.atualizarOnibus = function(veiculos, ajustarZoom) {
+      var idsAtuais = {};
+      var pontosBounds = [];
+
+      veiculos.forEach(function(v) {
+          var id = v.ordem;
+          idsAtuais[id] = true;
+          window._dadosVeiculos[id] = v;
+          pontosBounds.push([v.lat, v.lng]);
+
+          if (window._veiculos[id]) {
+              window._veiculos[id].setLatLng([v.lat, v.lng]);
+              window._veiculos[id].getPopup().setContent(v.popup);
+          } else {
+              var icon = L.divIcon({
+                  className: "",
+                  html: '<div style="background:' + v.cor + ';color:#fff;padding:4px 8px;' +
+                        'border-radius:10px;font-weight:bold;border:2px solid #bae6fd;' +
+                        'white-space:nowrap;font-size:11px;' +
+                        'box-shadow:0 2px 6px rgba(0,0,0,0.4);">' +
+                        v.label + '</div>',
+                  iconSize: [80, 26], iconAnchor: [40, 13]
+              });
+
+              var marker = L.marker([v.lat, v.lng], {icon: icon})
+                  .addTo(map).bindPopup(v.popup);
+              marker._busId = id;
+              marker.on("click", function() {
+                  var busData = window._dadosVeiculos[this._busId];
+                  var dist = -1;
+                  if (window._userLat !== null && busData) {
+                      dist = window.calcularDistancia(
+                          window._userLat, window._userLng,
+                          busData.lat, busData.lng);
+                  }
+                  if (window.Android) {
+                      Android.onBusClick(this._busId + "|" + dist.toFixed(3));
+                  }
+              });
+              window._veiculos[id] = marker;
+          }
+      });
+
+      // Remover veículos que não estão mais na lista
+      for (var id in window._veiculos) {
+          if (!idsAtuais[id]) {
+              map.removeLayer(window._veiculos[id]);
+              delete window._veiculos[id];
+              delete window._dadosVeiculos[id];
+          }
+      }
+
+      if (ajustarZoom && pontosBounds.length > 0) {
+          if (window._userLat !== null) {
+              pontosBounds.push([window._userLat, window._userLng]);
+          }
+          map.fitBounds(pontosBounds, {padding: [40, 40]});
+      }
+  };
+
+  // Iniciar geolocalização ao carregar
+  window.iniciarGeolocalizacao();
+</script>
+</body>
+</html>
