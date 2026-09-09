@@ -1,4 +1,4 @@
 {
   "gtfs_version": 20260910,
-  "db_url": "URL_RAW_DO_SEU_BANCO_DB"
+  "db_url": "https://raw.githubusercontent.com/SEU_USUARIO/cademeuonibus-data/main/gtfs_rio.db"
 }
