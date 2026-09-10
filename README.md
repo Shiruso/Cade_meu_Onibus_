@@ -1,10 +1,7 @@
 Este programa depende dos dados fornecidos pela DATA.RIO. Entre eles temos:
 
-O GTFS do RJ: https://www.data.rio/documents/b577e4c4c0924888823b630bbdb2c6fd/explore ele que é responsável pelos trajetos exibidos no mapa, os nomes das linhas, pontos de paradas, etc...
-
-Itinerários de Serviços de Ônibus Regulares: https://www.data.rio/datasets/PCRJ::itiner%C3%A1rios-de-servi%C3%A7os-de-%C3%B4nibus-regulares/about esse tbm é tipo um GTFS (eu acho) só que em CSV.
-
-Pontos de Parada da rede de transporte público por ônibus (SPPO):https://www.data.rio/datasets/PCRJ::pontos-de-parada-da-rede-de-transporte-p%C3%BAblico-por-%C3%B4nibus-sppo/about tbm é tipo um GTFS (eu acho) só que em CSV.
+O GTFS do RJ: https://www.data.rio/documents/b577e4c4c0924888823b630bbdb2c6fd/explore 
+ele que é responsável pelos trajetos exibidos no mapa, os nomes das linhas, pontos de paradas, etc...
 
 E tbm o primordial que são as API
 
@@ -15,11 +12,13 @@ E as novas API's são essas:
 "SistemaRIO" que tbm está em beta:https://www.data.rio/documents/32cdc652a9c84018a4c9bde73516ec59/about (até o momento só retorna dados inválidos, sla pq)
 "Zirix" que tbm está em beta:https://www.data.rio/documents/fd2c79eaf6aa424aab2516f261c9ffda/about (essa eu tentei colocar, mas não tem nenhuma documentação dela no Google Colab)
 
+
 Pro BRT tem esse aqui "API de GPS do BRT":https://www.data.rio/documents/PCRJ::transporte-rodovi%C3%A1rio-api-de-gps-do-brt/about?path= (eu tentei usar esse trem, mas não funcionou - acho que eles ainda vão ajeitar)
 Pra pegar os dados desse é só jogar o url https://dados.mobilidade.rio/gps/brt que ele vai cuspir um json cabuloso que você pode filtrar.
 
+
 E bom, baixar isso tudo num celular "veio podi" não dá certo, é muito pesado e ler arquivos TXT é horrível, demora pra chuchu.
-Então, eu fiz um scriptzinho em python (gerar_banco.py) que pega essa joça toda de GTFS, Itinerários e Paradas e cria um arquivo gtfs_rio.db (SQLite eu acho) que é muito mais fácil de lidar e mais leve.
+Então, eu fiz um scriptzinho em python (gerar_banco.py) que pega essa joça toda de GTFS e cria um arquivo gtfs_rio.db (SQLite eu acho) que é muito mais fácil de lidar e mais leve.
 
 Então o app basicamente pega o mapa, pega a linha que o usuário digitou, busca no arquivo gtfs_rio.db, taca os trajetos no mapa, enquanto isso ele faz a requisição a API e cospe o resultado no mapa e GG.
 
