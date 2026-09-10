@@ -45,7 +45,5 @@ Para resolver isso, foi desenvolvido o script em Python **`gerar_banco.py`**, re
 
 ---
 
-## 📌 Considerações e Contribuições
-Este projeto foi desenvolvido para fins acadêmicos e de aprendizado em desenvolvimento de software e integração de dados abertos.
-
-Contribuições, correções de bugs e *pull requests* são super bem-vindos!
+## 📌 Considerações
+- Eu não manjo muito de programação, só sei o arroz com feijão que vi no Youtube, então foi mal ae caso tenha feito algo errado. 
