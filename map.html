@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #map { width: 100%; height: 100%; background: #0f172a; }
+
+  /* Marcador pulsante do usuário */
+  @keyframes pulse {
+    0%   { transform: scale(1);   opacity: 1;   }
+    50%  { transform: scale(1.8); opacity: 0.4; }
+    100% { transform: scale(1);   opacity: 1;   }
+  }
+  .user-dot {
+    width: 24px; height: 24px;
+    background: #fbbf24;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .user-dot::before {
+    content: '👤';
+    font-size: 14px;
+  }
+  .user-dot::after {
+    content: '';
+    position: absolute;
+    top: -4px; left: -4px;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: rgba(251,191,36,0.3);
+    animation: pulse 2s infinite;
+  }
+
+  /* Popup customizado estilo limpo */
+  .leaflet-popup-content-wrapper {
+    background: #FFFFFF;
+    color: #0F172A;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    font-family: sans-serif;
+  }
+  .leaflet-popup-content {
+    margin: 12px 16px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  /* Animação suave para as polylines */
+  .leaflet-interactive {
+    transition: stroke-dashoffset 0.5s linear;
+  }
+
+  /* Novo Estilo para ícones de ônibus (Sprites) */
+  .bus-sprite-container {
+    width: 64px;
+    height: 64px;
+    background-image: url('bus_sprites.png'); /* Valor default */
+    background-size: 300% 300%; /* Sheet de 3 colunas x 3 linhas */
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+    /* A transição 'steps(1)' faz a troca de frame ser instantânea, sem deslizar */
+    transition: background-position 0.1s steps(1);
+  }
+
+  .map-zooming .bus-sprite-container {
+    transition: none !important;
+  }
+
+  /* Container do marcador Leaflet */
+  .bus-marker-icon {
+    background: transparent;
+    border: none;
+  }
+  .bus-marker-container:hover .bus-icon-bg {
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.6));
+  }
+  
+  /* Animação de entrada dos ônibus */
+  @keyframes busAppear {
+    0% {
+      transform: scale(0) translateY(-20px);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.1) translateY(0);
+    }
+    100% {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+"use strict";
+
+// ─── Inicialização do mapa ───────────────────────────────────────────────────
+var map = L.map("map", {
+  zoomControl: false,
+  tap: false,
+  markerZoomAnimation: true // Melhora performance de ícones no zoom
+}).setView([-22.9068, -43.1729], 12);
+
+// Desativa transições de marcadores DURANTE o zoom para não "descolarem" do mapa
+map.on('zoomstart', function() { document.getElementById('map').classList.add('map-zooming'); });
+map.on('zoomend',   function() { document.getElementById('map').classList.remove('map-zooming'); });
+
+var camadaOsm = L.tileLayer(
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap",
+    detectRetina: true
+  }
+);
+var camadaSat = L.tileLayer(
+  "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+  {
+    maxZoom: 20,
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    attribution: "Google Maps",
+    detectRetina: true
+  }
+);
+camadaOsm.addTo(map);
+L.control.layers({ "Padrão": camadaOsm, "Satélite": camadaSat }, {}, { position: "topright" }).addTo(map);
+
+// ─── Camadas e estado global ─────────────────────────────────────────────────
+window._layerRotas  = L.layerGroup().addTo(map);
+window._veiculos    = {};          // ordem -> marcador Leaflet
+window._dadosVeiculo= {};          // ordem -> objeto com lat/lng/etc
+window._userMarker  = null;
+window._userLat     = null;
+window._userLng     = null;
+
+// ─── Comunicação com Android ─────────────────────────────────────────────────
+function notificarAndroid(evento, dados) {
+  try {
+    if (typeof AndroidBridge !== "undefined") {
+      switch (evento) {
+        case "BUS_CLICK":  AndroidBridge.onBusClick(dados.ordem, dados.dist);  break;
+        case "GEO_UPDATE": AndroidBridge.onGeoUpdate(dados.lat, dados.lng);    break;
+        case "GEO_ERROR":  AndroidBridge.onGeoError(dados.msg);               break;
+        case "MAP_READY":  AndroidBridge.onMapReady();                         break;
+      }
+    }
+  } catch(e) { /* silencia erros de bridge em ambientes de teste */ }
+}
+
+// ─── Geolocalização do browser (backup — o Android injeta via FusedLocation) ─
+function iniciarGeolocalizacao() {
+  if (!navigator.geolocation) {
+    notificarAndroid("GEO_ERROR", { msg: "Geolocalização não suportada neste dispositivo." });
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    function(pos) {
+      atualizarPosicaoUsuario(pos.coords.latitude, pos.coords.longitude);
+    },
+    function(err) {
+      var msgs = {
+        1: "Permissão de localização negada. Ative nas configurações do dispositivo.",
+        2: "Localização indisponível. Verifique se o GPS está ativado.",
+        3: "Tempo limite excedido ao obter localização."
+      };
+      notificarAndroid("GEO_ERROR", { msg: msgs[err.code] || "Erro de localização." });
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+  );
+}
+
+// ─── Atualiza posição do usuário no mapa ──────────────────────────────────────
+// Chamada tanto pelo watchPosition quanto pelo FusedLocation via evaluateJavascript
+window.atualizarPosicaoUsuario = function(lat, lng) {
+  window._userLat = lat;
+  window._userLng = lng;
+
+  if (window._userMarker) {
+    window._userMarker.setLatLng([lat, lng]);
+  } else {
+    var icon = L.divIcon({
+      className: "",
+      html: '<div class="user-dot"></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    window._userMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 })
+      .addTo(map)
+      .bindPopup("<b>Você está aqui</b>");
+  }
+};
+
+window.centralizarMapa = function(lat, lng, zoom) {
+  map.setView([lat, lng], zoom || 15);
+};
+
+// ─── Configuração de Asset Remoto ────────────────────────────────────────────
+window.setSpriteUrl = function(url) {
+  // Cria uma regra CSS dinâmica para mudar a imagem dos ônibus
+  var style = document.createElement('style');
+  style.innerHTML = ".bus-sprite-container { background-image: url('" + url + "') !important; }";
+  document.head.appendChild(style);
+};
+
+// ─── Haversine em JS (para distância ao clicar no ônibus) ────────────────────
+function haversineKm(lat1, lng1, lat2, lng2) {
+  var R    = 6371.0;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a    = Math.sin(dLat/2) * Math.sin(dLat/2) +
+             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+             Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Lógica de Sprites baseada no ângulo (Bearing) ──────────────────────────
+// Mapeia 0-360 graus para posições no grid 3x3 do arquivo bus_sprites.png
+function getSpritePosition(bearing) {
+  if (bearing === null || bearing === undefined) return "50% 0%"; // Default: Norte
+
+  // Normaliza o ângulo
+  var b = (bearing % 360 + 360) % 360;
+
+  // Grade 3x3:
+  // NW(0,0)  N(50,0)   NE(100,0)
+  // W(0,50)  - (50,50) E(100,50)
+  // SW(0,100) S(50,100) SE(100,100)
+
+  if (b >= 337.5 || b < 22.5)  return "50% 0%";    // Norte
+  if (b >= 22.5  && b < 67.5)  return "100% 0%";   // Nordeste
+  if (b >= 67.5  && b < 112.5) return "100% 50%";  // Leste
+  if (b >= 112.5 && b < 157.5) return "100% 100%"; // Sudeste
+  if (b >= 157.5 && b < 202.5) return "50% 100%";  // Sul
+  if (b >= 202.5 && b < 247.5) return "0% 100%";   // Sudoeste
+  if (b >= 247.5 && b < 292.5) return "0% 50%";    // Oeste
+  if (b >= 292.5 && b < 337.5) return "0% 0%";     // Noroeste
+
+  return "50% 0%";
+}
+
+// ─── Limpa rotas e veículos do mapa ──────────────────────────────────────────
+window.limparMapa = function() {
+  window._layerRotas.clearLayers();
+  for (var id in window._veiculos) {
+    map.removeLayer(window._veiculos[id]);
+  }
+  window._veiculos    = {};
+  window._dadosVeiculo= {};
+};
+
+// ─── Atualiza marcadores de ônibus ────────────────────────────────────────────
+window.atualizarOnibus = function(veiculos, ajustarZoom) {
+  var idsAtuais  = {};
+  var pontosBounds = [];
+
+  veiculos.forEach(function(v) {
+    var id = v.ordem;
+    idsAtuais[id]         = true;
+    window._dadosVeiculo[id] = v;
+    pontosBounds.push([v.lat, v.lng]);
+
+    if (window._veiculos[id]) {
+      // Movimento ultra suave com transição CSS
+      window._veiculos[id].setLatLng([v.lat, v.lng]);
+      window._veiculos[id].getPopup().setContent(v.popup);
+
+      // Atualiza o frame do sprite baseada na nova direção
+      var el = window._veiculos[id].getElement();
+      if (el) {
+          var sprite = el.querySelector('.bus-sprite-container');
+          if (sprite) sprite.style.backgroundPosition = getSpritePosition(v.bearing);
+      }
+    } else {
+      // Cria novo marcador usando Sprites dinâmicos
+      var icon = L.divIcon({
+        className: "bus-marker-icon",
+        html: `<div class="bus-sprite-container" style="background-position: ${getSpritePosition(v.bearing)}"></div>`,
+        iconSize:   [64, 64],
+        iconAnchor: [32, 32],
+        popupAnchor: [0, -20]
+      });
+
+      var marker = L.marker([v.lat, v.lng], { icon: icon, opacity: 0 })
+        .addTo(map)
+        .bindPopup(v.popup);
+
+      // Fade-in effect suave
+      var op = 0;
+      var timer = setInterval(function() {
+        if (op >= 1) clearInterval(timer);
+        marker.setOpacity(op);
+        op += 0.1;
+      }, 30);
+
+      marker._busOrdem = id;
+      marker.on("click", function() {
+        notificarAndroid("BUS_CLICK", { ordem: this._busOrdem, dist: -1 });
+      });
+
+      window._veiculos[id] = marker;
+    }
+  });
+
+  // Remove marcadores de ônibus que não estão mais na lista
+  for (var id in window._veiculos) {
+    if (!idsAtuais[id]) {
+      map.removeLayer(window._veiculos[id]);
+      delete window._veiculos[id];
+      delete window._dadosVeiculo[id];
+    }
+  }
+
+  // Ajusta zoom para incluir todos os ônibus (e usuário, se disponível)
+  if (ajustarZoom && pontosBounds.length > 0) {
+    if (window._userLat !== null) {
+      pontosBounds.push([window._userLat, window._userLng]);
+    }
+    map.fitBounds(pontosBounds, { padding: [50, 50] });
+  }
+};
+
+// ─── Inicialização ────────────────────────────────────────────────────────────
+iniciarGeolocalizacao();
+notificarAndroid("MAP_READY", {});
+
+</script>
+</body>
+</html>
