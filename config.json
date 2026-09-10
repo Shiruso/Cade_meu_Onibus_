@@ -1,6 +1,6 @@
 {
   "gtfs_version": 2,
   "sprites_version": 1,
-  "intros_version": 5, 
+  "intros_version": 12, 
   "intros_list": ["img2.png"]
 }
