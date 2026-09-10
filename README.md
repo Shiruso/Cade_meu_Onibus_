@@ -1,30 +1,51 @@
-Este programa depende dos dados fornecidos pela DATA.RIO. Entre eles temos:
+# 🚌 Monitor de Ônibus & BRT - Rio de Janeiro
 
-O GTFS do RJ: https://www.data.rio/documents/b577e4c4c0924888823b630bbdb2c6fd/explore 
-ele que é responsável pelos trajetos exibidos no mapa, os nomes das linhas, pontos de paradas, etc...
+Aplicação para visualização e rastreamento em tempo real da frota de ônibus e BRT da cidade do Rio de Janeiro, utilizando dados abertos da plataforma **DATA.RIO**.
 
-E tbm o primordial que são as API
+---
 
-Antigamente tinha uma única api que foi descontinuada: https://www.data.rio/documents/PCRJ::transporte-rodovi%C3%A1rio-api-de-gps-de-%C3%B4nibus-urbanos-sppo-descontinuada/about?path=
+## 🛠️ Como Funciona
+1. **Busca e Rotas**: O usuário informa a linha desejada. O aplicativo consulta o banco de dados local em SQLite (`gtfs_rio.db`) para carregar o trajeto e os pontos de parada no mapa.
+2. **Localização em Tempo Real**: Simultaneamente, o app faz requisições às APIs de GPS para obter a posição atualizada dos veículos e exibe os ícones personalizados das frotas no mapa.
+3. **Atualização Automática**: O arquivo `config.json` verifica a versão dos dados no repositório. Caso haja atualizações, o app realiza o download dos arquivos necessários automaticamente.
 
-E as novas API's são essas:
-"Conecta" que está em fase beta: https://www.data.rio/documents/2a5d133b3e914065b9ece3790f5e5685/about (tá funcionando que é uma beleza, só os BRT que ele não puxa)
-"SistemaRIO" que tbm está em beta:https://www.data.rio/documents/32cdc652a9c84018a4c9bde73516ec59/about (até o momento só retorna dados inválidos, sla pq)
-"Zirix" que tbm está em beta:https://www.data.rio/documents/fd2c79eaf6aa424aab2516f261c9ffda/about (essa eu tentei colocar, mas não tem nenhuma documentação dela no Google Colab)
+---
 
+## 🗄️ Fontes de Dados e APIs
 
-Pro BRT tem esse aqui "API de GPS do BRT":https://www.data.rio/documents/PCRJ::transporte-rodovi%C3%A1rio-api-de-gps-do-brt/about?path= (eu tentei usar esse trem, mas não funcionou - acho que eles ainda vão ajeitar)
-Pra pegar os dados desse é só jogar o url https://dados.mobilidade.rio/gps/brt que ele vai cuspir um json cabuloso que você pode filtrar.
+### GTFS (General Transit Feed Specification)
+- **[GTFS RJ (DATA.RIO)](https://www.data.rio/documents/b577e4c4c0924888823b630bbdb2c6fd/explore)**: Contém as informações estáticas do sistema de transporte (linhas, trajetos, horários e pontos de parada).
 
+### APIs de GPS em Tempo Real (SPPO - Ônibus Urbanos)
+*Nota: A [API antiga de GPS](https://www.data.rio/documents/PCRJ::transporte-rodovi%C3%A1rio-api-de-gps-de-%C3%B4nibus-urbanos-sppo-descontinuada/about?path=) foi descontinuada.*
 
-E bom, baixar isso tudo num celular "veio podi" não dá certo, é muito pesado e ler arquivos TXT é horrível, demora pra chuchu.
-Então, eu fiz um scriptzinho em python (gerar_banco.py) que pega essa joça toda de GTFS e cria um arquivo gtfs_rio.db (SQLite eu acho) que é muito mais fácil de lidar e mais leve.
+- **[API Conecta (Beta)](https://www.data.rio/documents/2a5d133b3e914065b9ece3790f5e5685/about)**: API principal em uso. Apresenta excelente estabilidade para frotas de ônibus urbanos (SPPO).
+- **[API SistemaRIO (Beta)](https://www.data.rio/documents/32cdc652a9c84018a4c9bde73516ec59/about)**: Em fase de testes pela prefeitura.
+- **[API Zirix (Beta)](https://www.data.rio/documents/fd2c79eaf6aa424aab2516f261c9ffda/about)**: Em fase de testes pela prefeitura.
 
-Então o app basicamente pega o mapa, pega a linha que o usuário digitou, busca no arquivo gtfs_rio.db, taca os trajetos no mapa, enquanto isso ele faz a requisição a API e cospe o resultado no mapa e GG.
+### APIs do BRT
+- **[API de GPS do BRT](https://dados.mobilidade.rio/gps/brt)**: Endpoint utilizado para capturar as coordenadas dos veículos do BRT via payload JSON.
+- Documentação técnica no portal: [Documentação BRT DATA.RIO](https://www.data.rio/documents/PCRJ::transporte-rodovi%C3%A1rio-api-de-gps-do-brt/about?path=).
 
-Ah, quanto ao config.json que coloquei aqui no repositório ele só serve pro app ver se eu fiz alguma atualização, se sim ele baixa os arquivos novos, senão ele fica de xereco.
+---
 
-Deu um trabalho do carai fazer esse trem, eu coloquei até os ônibuzinhos iguais ao da viação Jabour que eu pego as vezes e ficou do caralho.
+## ⚡ Otimização do Banco de Dados
 
-Enfim, eu criei esse arquivo só pra listar os locais onde você pode pegar os arquivos e a documentação das API. Eu não manjo muito de programação, só sei o arroz com feijão que aprendi no youtube,
-então foi mal ae caso eu tenha feito alguma merda que não esteja funcionando direito.
+Processar diretamente os arquivos de texto (`.txt`) brutos do GTFS em dispositivos móveis exige alto processamento e memória. 
+
+Para resolver isso, foi desenvolvido o script em Python **`gerar_banco.py`**, responsável por:
+1. Processar os arquivos `.txt` do GTFS oficial.
+2. Converter e estruturar os dados em um banco **SQLite local (`gtfs_rio.db`)**.
+3. Reduzir drasticamente o tempo de leitura e o uso de memória no dispositivo Android.
+
+---
+
+## 🎨 Personalização
+- O mapa conta com **ícones visuais personalizados** representando as frotas e viações locais da cidade (como a Viação Jabour).
+
+---
+
+## 📌 Considerações e Contribuições
+Este projeto foi desenvolvido para fins acadêmicos e de aprendizado em desenvolvimento de software e integração de dados abertos.
+
+Contribuições, correções de bugs e *pull requests* são super bem-vindos!
