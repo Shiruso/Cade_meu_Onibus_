@@ -6,5 +6,5 @@
   "intro_images": [
     "https://raw.githubusercontent.com/shiruso/cademeuonibus-data/main/Intros/img1.png"
   ],
-  "api_poll_interval_ms": 10
+  "api_poll_interval_ms": 10000
 }
