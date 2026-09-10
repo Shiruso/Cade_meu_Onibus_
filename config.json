@@ -1,10 +1,10 @@
 {
-  "gtfs_version": 1,
+  "gtfs_version": 2,
   "db_url": "https://raw.githubusercontent.com/shiruso/cademeuonibus-data/main/gtfs_rio.db",
   "map_url": "https://shiruso.github.io/cademeuonibus-data/map.html",
   "bus_sprite_url": "https://raw.githubusercontent.com/shiruso/cademeuonibus-data/main/bus_sprites.png",
   "intro_images": [
     "https://raw.githubusercontent.com/shiruso/cademeuonibus-data/main/Intros/img1.png"
   ],
-  "api_poll_interval_ms": 10000
+  "api_poll_interval_ms": 10
 }
