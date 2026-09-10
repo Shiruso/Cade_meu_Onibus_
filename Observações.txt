@@ -23,6 +23,8 @@ Então, eu fiz um scriptzinho em python (gerar_banco.py) que pega essa joça tod
 
 Então o app basicamente pega o mapa, pega a linha que o usuário digitou, busca no arquivo gtfs_rio.db, taca os trajetos no mapa, enquanto isso ele faz a requisição a API e cospe o resultado no mapa e GG.
 
+Ah, quanto ao config.json que coloquei aqui no repositório ele só serve pro app ver se eu fiz alguma atualização, se sim ele baixa os arquivos novos, senão ele fica de xereco.
+
 Deu um trabalho do carai fazer esse trem, eu coloquei até os ônibuzinhos iguais ao da viação Jabour que eu pego as vezes e ficou do caralho.
 
 Enfim, eu criei esse arquivo só pra listar os locais onde você pode pegar os arquivos e a documentação das API. Eu não manjo muito de programação, só sei o arroz com feijão que aprendi no youtube,
